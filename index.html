@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Box Creator</title>
+    <style>
+        body {
+            background-color: #dfdfdf;
+        }
+
+        .box {
+            width: 100px;
+            height: 100px;
+            border: 2px solid #000;
+            display: inline-block;
+            margin: 5px;
+            cursor: pointer;
+            position: absolute;
+            background-color: #fff;
+        }
+
+        .selected {
+            border: 2px solid #2300ec;
+        }
+
+        /* New CSS for the resize handlers */
+        .resize-handler {
+            width: 5px;
+            height: 5px;
+            background-color: rgba(255, 0, 0, 0);
+            position: absolute;
+        }
+
+        .resize-handler-x {
+            top: 0;
+            cursor: ew-resize;
+        }
+
+        .resize-handler-y {
+            left: calc(50% - 2.5px);
+            cursor: ns-resize;
+        }
+
+        .resize-handler-x.right,
+        .resize-handler-x.left {
+            height: 100%;
+        }
+
+        .resize-handler-y.bottom,
+        .resize-handler-y.top {
+            width: 100%;
+        }
+
+        .resize-handler-x.right {
+            right: -5px;
+        }
+
+        .resize-handler-x.left {
+            left: -5px;
+        }
+
+        .resize-handler-y.bottom {
+            bottom: -5px;
+        }
+
+        .resize-handler-y.top {
+            top: -5px;
+        }
+
+        .rotate-handler {
+            width: 20px;
+            height: 20px;
+            position: absolute;
+            top: -25px;
+            left: calc(50% - 10px);
+            background: url('https://img.icons8.com/windows/32/6c757d/rotate.png');
+            background-size: cover;
+            opacity: 0;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .box.selected .rotate-handler {
+            opacity: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <button id="createBox">Create Box</button>
+    <div id="boxOptions">
+        <div>
+            <label for="borderRadius">Border Radius:</label>
+            <input type="range" id="borderRadius" min="0" max="50" step="1" value="0">
+        </div>
+        <div>
+            <label for="backgroundColor">Background Color:</label>
+            <input type="color" id="backgroundColor" value="#fff">
+        </div>
+    </div>
+    <div id="boxContainer"></div>
+    <script>
+        // Get DOM elements
+        const borderRadiusInput = document.getElementById('borderRadius');
+        const backgroundColorInput = document.getElementById('backgroundColor');
+        const boxOptions = document.getElementById('boxOptions');
+
+        // Get the smallest length of the box
+        function getSmallestLength(box) {
+            const boxWidth = box.offsetWidth;
+            const boxHeight = box.offsetHeight;
+            return Math.min(boxWidth, boxHeight);
+        }
+
+        // Update the max value of the border radius input
+        function updateBorderRadiusInputMax(selectedBox) {
+            const smallestLength = getSmallestLength(selectedBox);
+            const maxBorderRadius = smallestLength / 2;
+            borderRadiusInput.max = maxBorderRadius;
+        }
+
+        // Listen for click events
+        document.addEventListener('click', function (event) {
+            // If clicked on the border radius input, ignore
+            if (event.target === borderRadiusInput) {
+                return;
+            }
+
+            // Get the selected box
+            const selectedBox = event.target.closest('.box');
+            const selectedBoxes = document.querySelectorAll('.selected');
+
+            // If not clicked on the background color input
+            if (event.target !== backgroundColorInput) {
+                if (!selectedBox) {
+                    // Remove the 'selected' class from all boxes
+                    selectedBoxes.forEach((box) => box.classList.remove('selected'));
+                } else {
+                    // Remove the 'selected' class from all boxes except the selected one
+                    selectedBoxes.forEach((box) => {
+                        if (box !== selectedBox) {
+                            box.classList.remove('selected');
+                        }
+                    });
+                    selectedBox.classList.add('selected');
+                    boxOptions.style.display = 'block';
+
+                    // Update the input values according to the selected box
+                    updateBorderRadiusInputMax(selectedBox);
+                    const boxStyle = window.getComputedStyle(selectedBox);
+                    const borderRadius = parseInt(boxStyle.borderRadius);
+                    const backgroundColor = boxStyle.backgroundColor;
+
+                    backgroundColorInput.value = rgbToHex(backgroundColor);
+                    borderRadiusInput.value = borderRadius;
+                    borderRadiusInput.max = Math.min(getSmallestLength(selectedBox) / 2, borderRadiusInput.max);
+                }
+            }
+        });
+
+        // Utility function to convert RGB color to HEX color
+        function rgbToHex(rgb) {
+            const match = rgb.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?\s*\)$/i);
+            if (!match) {
+                return rgb;
+            }
+            const hex = (n) => Number(n).toString(16).padStart(2, '0');
+            return "#" + hex(match[1]) + hex(match[2]) + hex(match[3]);
+        }
+
+        // Create resize handlers
+        function createHandler(className, resizeFunction) {
+            const handler = document.createElement('div');
+            handler.className = className;
+            handler.onmousedown = resizeFunction;
+            return handler;
+        }
+
+        function createRotateHandler(box) {
+            const handler = document.createElement('div');
+            handler.className = 'rotate-handler';
+
+            handler.onmousedown = function (event) {
+                event.stopPropagation();
+
+                const boxRect = box.getBoundingClientRect();
+                const boxCenter = {
+                    x: boxRect.left + boxRect.width / 2,
+                    y: boxRect.top + boxRect.height / 2
+                };
+
+                let initialAngle = Math.atan2(event.clientY - boxCenter.y, event.clientX - boxCenter.x);
+                let initialRotation = parseFloat(box.style.transform.match(/rotate\(([-\d.]+)deg\)/)?.[1] || 0);
+
+                function rotate(event) {
+                    const angleDiff = Math.atan2(event.clientY - boxCenter.y, event.clientX - boxCenter.x) - initialAngle;
+                    const degrees = initialRotation + (angleDiff * 180 / Math.PI);
+                    box.style.transform = `rotate(${degrees}deg)`;
+                }
+
+                function rotateEnd() {
+                    document.removeEventListener('mousemove', rotate);
+                    document.removeEventListener('mouseup', rotateEnd);
+                }
+
+                document.addEventListener('mousemove', rotate);
+                document.addEventListener('mouseup', rotateEnd);
+            };
+
+            return handler;
+        }
+
+        // Create a new box when the "Create Box" button is clicked
+        document.getElementById('createBox').addEventListener('click', function () {
+            const box = document.createElement('div');
+            box.className = 'box';
+
+            // Add resize handlers for X and Y axis
+            ['left', 'right'].forEach(position => {
+                const className = `resize-handler resize-handler-x ${position}`;
+                box.appendChild(createHandler(className, resizeStart));
+            });
+
+            ['top', 'bottom'].forEach(position => {
+                const className = `resize-handler resize-handler-y ${position}`;
+                box.appendChild(createHandler(className, resizeStart));
+            });
+
+            // Function to start resizing a box
+            function resizeStart(event) {
+                event.stopPropagation();
+
+                const handler = event.target;
+                const resizingX = handler.classList.contains('resize-handler-x');
+                const startPos = { x: event.clientX, y: event.clientY };
+                const startWidth = box.clientWidth;
+                const startHeight = box.clientHeight;
+                const isLeft = handler.classList.contains('left');
+                const isTop = handler.classList.contains('top');
+
+                function resize(event) {
+                    if (resizingX) {
+                        const deltaX = event.clientX - startPos.x;
+                        let newWidth = isLeft ? startWidth - deltaX : startWidth + deltaX;
+                        if (newWidth >= 20) {
+                            if (isLeft) {
+                                box.style.left = event.clientX + 'px';
+                            }
+                            box.style.width = newWidth + 'px';
+                        }
+                    } else {
+                        const deltaY = event.clientY - startPos.y;
+                        let newHeight = isTop ? startHeight - deltaY : startHeight + deltaY;
+                        if (newHeight >= 20) {
+                            if (isTop) {
+                                box.style.top = event.clientY + 'px';
+                            }
+                            box.style.height = newHeight + 'px';
+                        }
+                    }
+
+                    updateBorderRadiusInputMax(box);
+                }
+
+                function resizeEnd() {
+                    document.removeEventListener('mousemove', resize);
+                    document.removeEventListener('mouseup', resizeEnd);
+                }
+
+                document.addEventListener('mousemove', resize);
+                document.addEventListener('mouseup', resizeEnd);
+            }
+
+            box.appendChild(createRotateHandler(box));
+
+            // Function for moving a box
+            box.onmousedown = function (event) {
+                let shiftX = event.clientX - box.getBoundingClientRect().left;
+                let shiftY = event.clientY - box.getBoundingClientRect().top;
+
+                function moveAt(pageX, pageY) {
+                    box.style.left = pageX - shiftX + 'px';
+                    box.style.top = pageY - shiftY + 'px';
+                }
+
+                function onMouseMove(event) {
+                    moveAt(event.pageX, event.pageY);
+                }
+
+                document.addEventListener('mousemove', onMouseMove);
+
+                box.onmouseup = function () {
+                    document.removeEventListener('mousemove', onMouseMove);
+                    box.onmouseup = null;
+                };
+            };
+
+            box.ondragstart = function () {
+                return false;
+            };
+
+            document.getElementById('boxContainer').appendChild(box);
+        });
+
+        // Add event listeners for border radius slider and background color picker
+        borderRadiusInput.addEventListener('input', function () {
+            const selectedBox = document.querySelector('.box.selected');
+            if (selectedBox) {
+                const borderRadius = this.value + 'px';
+                selectedBox.style.borderRadius = borderRadius;
+            }
+        });
+
+        backgroundColorInput.addEventListener('input', function () {
+            const selectedBox = document.querySelector('.box.selected');
+            if (selectedBox) {
+                const backgroundColor = this.value;
+                selectedBox.style.backgroundColor = backgroundColor;
+            }
+        });
+
+        // Prevent the color picker from triggering the document click event
+        backgroundColorInput.addEventListener('mousedown', function (event) {
+            event.stopPropagation();
+        });
+
+    </script>
+</body>
+
+</html>
